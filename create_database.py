@@ -22,7 +22,8 @@ class User(Base):
     __table_args__ = {"schema": "core"}
     
     id = Column(Integer, primary_key=True, index=True)
-    username = Column(String(100), unique=True, nullable=False)
+    nome = Column(String(100), nullable=False)
+    sobrenome = Column(String(100), nullable=False )
     email = Column(String(255), unique=True, nullable=False)
     password_hash = Column(String(255), nullable=False)
     cpf = Column(String(255), unique = True, nullable = False)
@@ -40,4 +41,4 @@ if __name__ == "__main__":
     print("Criando tabela no schema 'core'...")
     Base.metadata.create_all(bind=engine)
     
-    print("✅ Tabela 'core.app_users' criada com sucesso!")
+    print("Tabela 'core.app_users' criada com sucesso!")
