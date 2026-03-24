@@ -25,6 +25,8 @@ class User(Base):
     username = Column(String(100), unique=True, nullable=False)
     email = Column(String(255), unique=True, nullable=False)
     password_hash = Column(String(255), nullable=False)
+    cpf = Column(String(255), unique = True, nullable = False)
+    telefone = Column(String(255), unique = True, nullable = False)
     risk_profile = Column(String(50), default="MODERADO")
     created_at = Column(DateTime, default=datetime.datetime.utcnow)
 
