@@ -1,4 +1,5 @@
 import os
+
 import create_database
 from dotenv import load_dotenv
 from fastapi import FastAPI, HTTPException, Depends
@@ -7,6 +8,8 @@ from sqlalchemy import create_engine, Column, Integer, String, DateTime, text
 from sqlalchemy.orm import declarative_base, sessionmaker, Session
 from pydantic import BaseModel, EmailStr
 import datetime
+import bcrypt
+import jwt
 
 load_dotenv()
 
@@ -15,6 +18,9 @@ DB_PASSWORD = os.getenv("POSTGRES_PASSWORD")
 DB_HOST = os.getenv("POSTGRES_HOST")
 DB_PORT = os.getenv("POSTGRES_PORT")
 DB_NAME = os.getenv("POSTGRES_DB")
+
+SECRET_KEY = os.getenv("SECRET_KEY")
+ALGORITHM = os.getenv("ALGORITHM")
 
 DATABASE_URL = f"postgresql://{DB_USER}:{DB_PASSWORD}@{DB_HOST}:{DB_PORT}/{DB_NAME}"
 
@@ -42,7 +48,9 @@ class User(Base):
 with engine.connect() as conn:
     conn.execute(text("CREATE SCHEMA IF NOT EXISTS core;"))
     conn.commit()
-    Base.metadata.create_all(bind=engine)
+Base.metadata.create_all(bind=engine)
+
+# iniciando a api
 
 app = FastAPI()
 
@@ -54,6 +62,8 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
+# moldes
+
 class UserCreate(BaseModel):
     nome: str
     sobrenome: str
@@ -62,6 +72,12 @@ class UserCreate(BaseModel):
     cpf: str
     telefone: str
     risk_profile: str = "MODERADO"
+
+# molde de login
+
+class UserLogin(BaseModel):
+    email: EmailStr
+    password: str
 
 class UserUpdate(BaseModel):
     nome: str | None = None
@@ -76,16 +92,38 @@ def get_db():
     finally:
         db.close()
 
+# rotas e autenticação
+
+@app.post("/login")
+def login(user_credentials: UserLogin, db: Session = Depends(get_db)):
+    user = db.query(User).filter(User.email == user_credentials.email).first() #procura o usuario pelo email
+
+    # se nao achar o usuario ou a senha n bater no banco vai dar erro aq
+    if not user or not bcrypt.checkpw(user_credentials.password.encode('utf-8'), user.password_hash.encode('utf-8')):
+        raise HTTPException(status_code=401, detail = "Email ou senha incorretos.")
+
+    payload = {
+        "sub": str(user.id),
+        "risk_profile": user.risk_profile,
+        "exp": datetime.datetime.utcnow() + datetime.timedelta(hours = 2)
+    }
+    token = jwt.encode(payload, SECRET_KEY, algorithm=ALGORITHM)
+
+    return {"access_token": token, "token_type": "bearer", "risk_profile": user.risk_profile}
+
 @app.post("/users")
 def create_user(user: UserCreate, db: Session = Depends(get_db)):
     if db.query(User).filter((User.email == user.email) | (User.cpf == user.cpf)).first():
         raise HTTPException(status_code=400, detail="Email ou CPF já cadastrado.")
+    
+    salt = bcrypt.gensalt()
+    hashed_password = bcrypt.hashpw(user.password_hash.encode('utf-8'), salt).decode('utf-8')
 
     new_user = User(
         nome=user.nome,
         sobrenome=user.sobrenome,
         email=user.email,
-        password_hash=user.password_hash,
+        password_hash=hashed_password,
         cpf=user.cpf,
         telefone=user.telefone,
         risk_profile=user.risk_profile.upper()
